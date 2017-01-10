@@ -1,0 +1,24 @@
+{
+  "name": "leaflet-geomixer-webpack",
+  "version": "3.0.0",
+  "description": "Geomixer vectorLayer for Leaflet",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "watch": "webpack --progress --colors --watch"
+  },
+  "keywords": [
+    "geomixer",
+    "leaflet"
+  ],
+  "author": "Serg Alexeev",
+  "license": "MIT",
+  "devDependencies": {
+    "babel-core": "^6.21.0",
+    "babel-loader": "^6.2.10",
+    "babel-preset-es2015": "^6.18.0",
+    "eslint-loader": "^1.6.1",
+    "unminified-webpack-plugin": "^1.2.0",
+    "webpack": "^1.14.0"
+  }
+}
