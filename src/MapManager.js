@@ -95,6 +95,4 @@ var gmxMapManager = {
     },
     _maps: {} //Promise for each map. Structure: maps[serverHost][mapID]: {promise:, layers:}
 };
-
-L.gmx = L.gmx || {};
-L.gmx.gmxMapManager = gmxMapManager;
+export {gmxMapManager};

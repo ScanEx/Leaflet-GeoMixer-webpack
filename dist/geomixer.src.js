@@ -58,7 +58,7 @@
 	
 	__webpack_require__(6);
 	
-	__webpack_require__(7);
+	var _MapManager = __webpack_require__(7);
 	
 	__webpack_require__(8);
 	
@@ -74,11 +74,11 @@
 	
 	__webpack_require__(14);
 	
-	__webpack_require__(15);
+	var _Observer = __webpack_require__(15);
 	
 	__webpack_require__(16);
 	
-	__webpack_require__(17);
+	var _DataManager = __webpack_require__(17);
 	
 	__webpack_require__(18);
 	
@@ -117,6 +117,15 @@
 	__webpack_require__(35);
 	
 	__webpack_require__(36);
+	
+	L.gmx = L.gmx || {};
+	
+	// import './commonjs.js';
+	L.gmx.gmxMapManager = _MapManager.gmxMapManager;
+	L.gmx.observer = function (options) {
+	  return new _Observer.Observer(options);
+	};
+	L.gmx.DataManager = _DataManager.DataManager;
 
 /***/ },
 /* 1 */
@@ -4410,6 +4419,11 @@
 
 	'use strict';
 	
+	Object.defineProperty(exports, "__esModule", {
+	    value: true
+	});
+	exports.gmxMapManager = undefined;
+	
 	var _Utils = __webpack_require__(4);
 	
 	var gmxMapManager = {
@@ -4504,10 +4518,7 @@
 	    _maps: {} //Promise for each map. Structure: maps[serverHost][mapID]: {promise:, layers:}
 	}; /** Asynchronously request information about map given server host and map name
 	   */
-	
-	
-	L.gmx = L.gmx || {};
-	L.gmx.gmxMapManager = gmxMapManager;
+	exports.gmxMapManager = gmxMapManager;
 
 /***/ },
 /* 8 */
@@ -5284,6 +5295,11 @@
 
 	'use strict';
 	
+	Object.defineProperty(exports, "__esModule", {
+	    value: true
+	});
+	exports.Observer = undefined;
+	
 	var _Utils = __webpack_require__(4);
 	
 	var Observer = L.Class.extend({
@@ -5549,10 +5565,7 @@
 	        return this;
 	    }
 	}); //Single observer with vector data
-	
-	L.gmx.observer = function (options) {
-	    return new Observer(options);
-	};
+	exports.Observer = Observer;
 
 /***/ },
 /* 16 */
@@ -5818,6 +5831,11 @@
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict';
+	
+	Object.defineProperty(exports, "__esModule", {
+	    value: true
+	});
+	exports.DataManager = undefined;
 	
 	var _Utils = __webpack_require__(4);
 	
@@ -6895,8 +6913,7 @@
 	    }
 	
 	});
-	L.gmx = L.gmx || {};
-	L.gmx.DataManager = DataManager;
+	exports.DataManager = DataManager;
 
 /***/ },
 /* 18 */

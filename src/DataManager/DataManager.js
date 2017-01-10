@@ -1055,5 +1055,4 @@ var DataManager = L.Class.extend({
     }
 
 });
-L.gmx = L.gmx || {};
-L.gmx.DataManager = DataManager;
+export {DataManager};

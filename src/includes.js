@@ -1,3 +1,5 @@
+L.gmx = L.gmx || {};
+
 // import './commonjs.js';
 import './Parsers.js';
 import './Deferred.js';
@@ -5,7 +7,7 @@ import './ImageLoader.js';
 import './Utils.js';
 import './DrawCanvas.js';
 import './SessionManager.js';
-import './MapManager.js';
+import {gmxMapManager} from './MapManager.js';	L.gmx.gmxMapManager = gmxMapManager;
 import './GeomixerMap.js';
 import './EventsManager.js';
 import './Locale.js';
@@ -14,9 +16,9 @@ import './lang_en.js';
 
 import './DataManager/VectorTileLoader.js';
 import './DataManager/VectorTile.js';
-import './DataManager/Observer.js';
+import {Observer} from './DataManager/Observer.js';	L.gmx.observer = function(options) { return new Observer(options); };
 import './DataManager/TilesTree.js';
-import './DataManager/DataManager.js';
+import {DataManager} from './DataManager/DataManager.js';	L.gmx.DataManager = DataManager;
 
 import './Layer/VectorLayer.js';
 import './Layer/ScreenVectorTile.js';
