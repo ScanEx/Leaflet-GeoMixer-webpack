@@ -62,23 +62,23 @@
 	
 	__webpack_require__(8);
 	
-	__webpack_require__(9);
-	
-	__webpack_require__(10);
-	
-	__webpack_require__(11);
-	
 	__webpack_require__(12);
 	
 	__webpack_require__(13);
 	
 	__webpack_require__(14);
 	
-	var _Observer = __webpack_require__(15);
+	__webpack_require__(15);
 	
-	__webpack_require__(16);
+	__webpack_require__(11);
 	
-	var _DataManager = __webpack_require__(17);
+	__webpack_require__(10);
+	
+	var _Observer = __webpack_require__(16);
+	
+	__webpack_require__(17);
+	
+	var _DataManager = __webpack_require__(9);
 	
 	__webpack_require__(18);
 	
@@ -117,6 +117,8 @@
 	__webpack_require__(35);
 	
 	__webpack_require__(36);
+	
+	__webpack_require__(37);
 	
 	L.gmx = L.gmx || {};
 	
@@ -4515,6 +4517,22 @@
 	
 	        treeInfo && iterate(treeInfo.children);
 	    },
+	    iterateNode: function iterateNode(treeInfo, callback) {
+	        var iterate = function iterate(node) {
+	            var arr = node.children;
+	            for (var i = 0, len = arr.length; i < len; i++) {
+	                var layer = arr[i];
+	
+	                callback(layer);
+	                if (layer.type === 'group') {
+	                    iterate(layer.content);
+	                    // } else if (layer.type === 'layer') {
+	                }
+	            }
+	        };
+	
+	        treeInfo && iterate(treeInfo);
+	    },
 	    _maps: {} //Promise for each map. Structure: maps[serverHost][mapID]: {promise:, layers:}
 	}; /** Asynchronously request information about map given server host and map name
 	   */
@@ -4522,12 +4540,12 @@
 
 /***/ },
 /* 8 */
-/***/ function(module, exports) {
+/***/ function(module, exports, __webpack_require__) {
 
 	'use strict';
 	
-	//Helper class, that represents layers of single Geomixer's map
-	//Creates layers from given map description
+	var _DataManager = __webpack_require__(9);
+	
 	var gmxMap = L.Class.extend({
 		includes: L.Mixin.Events,
 	
@@ -4605,7 +4623,7 @@
 				    pLayer = this.layersByID[pId];
 				if (pLayer) {
 					it.options.parentOptions = pLayer.getGmxProperties();
-					it.options.dataManager = this.dataManagers[pId] || new DataManager(it.options.parentOptions, true);
+					it.options.dataManager = this.dataManagers[pId] || new _DataManager.DataManager(it.options.parentOptions, true);
 					this.dataManagers[pId] = it.options.dataManager;
 					this.addLayer(L.gmx.createLayer(it.info, it.options));
 				} else {
@@ -4663,7 +4681,7 @@
 		addDataManager: function addDataManager(it) {
 			var pid = it.properties.name;
 			if (!this.dataManagers[pid]) {
-				this.dataManagers[pid] = new DataManager(it.properties);
+				this.dataManagers[pid] = new _DataManager.DataManager(it.properties);
 			}
 			return this.dataManagers[pid];
 		},
@@ -4709,1125 +4727,14 @@
 	
 			return this;
 		}
-	});
+	}); //Helper class, that represents layers of single Geomixer's map
+	//Creates layers from given map description
+	
 	L.gmx = L.gmx || {};
 	L.gmx.gmxMap = gmxMap;
 
 /***/ },
 /* 9 */
-/***/ function(module, exports) {
-
-	'use strict';
-	
-	/*
-	 * gmxEventsManager - handlers manager
-	 */
-	var GmxEventsManager = L.Handler.extend({
-	    options: {},
-	
-	    initialize: function initialize(map) {
-	        this._map = map;
-	        this._layers = {};
-	        this._lastLayer = null;
-	        this._lastId = null;
-	        var _this = this;
-	        this._drawstart = null;
-	        this._lastCursor = '';
-	
-	        var isDrawing = function isDrawing() {
-	            if (_this._drawstart) {
-	                return true;
-	            } else if (_this._drawstart === null) {
-	                if (map.gmxControlsManager) {
-	                    var drawingControl = map.gmxControlsManager.get('drawing');
-	                    if (drawingControl) {
-	                        drawingControl.on('activechange', function (ev) {
-	                            _this._drawstart = ev.activeIcon;
-	                            map._container.style.cursor = _this._drawstart ? 'pointer' : '';
-	                        });
-	                    }
-	                }
-	                _this._drawstart = false;
-	            }
-	            return false;
-	        };
-	
-	        var getDomIndex = function getDomIndex(layer) {
-	            var container = layer._container;
-	            if (container) {
-	                var arr = container.parentNode.childNodes;
-	                for (var i = 0, len = arr.length; i < len; i++) {
-	                    if (container === arr[i]) {
-	                        return i;
-	                    }
-	                }
-	            }
-	            return 0;
-	        };
-	
-	        var skipNodeName = {
-	            IMG: true,
-	            DIV: true,
-	            path: true
-	        };
-	
-	        var clearLastHover = function clearLastHover() {
-	            if (_this._lastLayer) {
-	                _this._lastLayer.gmxEventCheck({ type: 'mousemove' }, true);
-	                _this._lastLayer = null;
-	            }
-	        };
-	
-	        var eventCheck = function eventCheck(ev) {
-	            var type = ev.type,
-	                map = _this._map,
-	                skipNode = false;
-	            if (ev.originalEvent) {
-	                map.gmxMouseDown = L.Browser.webkit ? ev.originalEvent.which : ev.originalEvent.buttons;
-	                var target = ev.originalEvent.target;
-	                skipNode = skipNodeName[target.nodeName] && !L.DomUtil.hasClass(target, 'leaflet-tile') && !L.DomUtil.hasClass(target, 'leaflet-popup-tip-container');
-	            }
-	            if (map._animatingZoom || isDrawing() || skipNode || type === 'click' && map._skipClick || // from drawing
-	            type === 'mousemove' && map.gmxMouseDown) {
-	                clearLastHover();
-	                map._skipClick = false;
-	                return;
-	            }
-	            if (ev.layerPoint) {
-	                map._gmxMouseLatLng = ev.latlng;
-	                map.gmxMousePos = map.getPixelOrigin().add(ev.layerPoint);
-	            }
-	
-	            var arr = Object.keys(_this._layers).sort(function (a, b) {
-	                var la = map._layers[a],
-	                    lb = map._layers[b];
-	                if (la && lb) {
-	                    var oa = la.options,
-	                        ob = lb.options,
-	                        za = (oa.zIndexOffset || 0) + (oa.zIndex || 0),
-	                        zb = (ob.zIndexOffset || 0) + (ob.zIndex || 0),
-	                        delta = zb - za;
-	                    return delta ? delta : _this._layers[b] - _this._layers[a];
-	                }
-	                return 0;
-	            });
-	
-	            var layer,
-	                foundLayer = null,
-	                cursor = '';
-	
-	            for (var i = 0, len = arr.length; i < len; i++) {
-	                var id = arr[i];
-	                layer = map._layers[id];
-	                if (layer && layer._map && !layer._animating && layer.options.clickable) {
-	                    if (layer.gmxEventCheck(ev)) {
-	                        if (layer.hasEventListeners('mouseover')) {
-	                            cursor = 'pointer';
-	                        }
-	                        foundLayer = layer;
-	                        break;
-	                    }
-	                }
-	            }
-	            if (_this._lastCursor !== cursor && !isDrawing()) {
-	                map._container.style.cursor = cursor;
-	            }
-	            _this._lastCursor = cursor;
-	
-	            if (type !== 'zoomend') {
-	                if (foundLayer) {
-	                    if (_this._lastLayer !== foundLayer) {
-	                        clearLastHover();
-	                    }
-	                    _this._lastLayer = foundLayer;
-	                } else {
-	                    clearLastHover();
-	                }
-	            }
-	        };
-	
-	        map.on({
-	            zoomend: function zoomend() {
-	                if (map._gmxMouseLatLng) {
-	                    setTimeout(function () {
-	                        eventCheck({ type: 'mousemove', latlng: map._gmxMouseLatLng });
-	                    }, 0);
-	                }
-	            },
-	            click: eventCheck,
-	            dblclick: eventCheck,
-	            mousedown: eventCheck,
-	            mouseup: eventCheck,
-	            mousemove: eventCheck,
-	            contextmenu: eventCheck,
-	            layeradd: function layeradd(ev) {
-	                var layer = ev.layer;
-	                if ('gmxEventCheck' in layer && layer.options.clickable) {
-	                    _this._layers[layer._leaflet_id] = getDomIndex(layer);
-	                }
-	            },
-	            layerremove: function layerremove(ev) {
-	                var id = ev.layer._leaflet_id;
-	                delete _this._layers[id];
-	                if (_this._lastLayer && _this._lastLayer._leaflet_id === id) {
-	                    _this._lastLayer = null;
-	                    _this._lastId = 0;
-	                }
-	            }
-	        }, this);
-	    }
-	});
-	
-	L.Map.addInitHook(function () {
-	    // Check to see if handler has already been initialized.
-	    if (!this._gmxEventsManager) {
-	        this._gmxEventsManager = new GmxEventsManager(this);
-	        this.isGmxDrawing = function () {
-	            return this._gmxEventsManager._drawstart;
-	        };
-	
-	        this.on('remove', function () {
-	            if (this._gmxEventsManager) {
-	                this._gmxEventsManager.removeHooks();
-	            }
-	        });
-	    }
-	});
-
-/***/ },
-/* 10 */
-/***/ function(module, exports) {
-
-	'use strict';
-	
-	(function () {
-	    var DEFAULT_LANGUAGE = 'rus',
-	        _setKeyText = function _setKeyText(lang, key, item, hash) {
-	        if (!hash[lang]) {
-	            hash[lang] = {};
-	        }
-	        hash[lang][key] = item;
-	    };
-	    L.gmxLocale = {
-	
-	        setLanguage: function setLanguage(lang) {
-	            this._language = lang;
-	        },
-	
-	        getLanguage: function getLanguage() {
-	            return window.language || this._language || DEFAULT_LANGUAGE;
-	        }
-	    };
-	
-	    L.gmxLocaleMixin = {
-	        addText: function addText() {
-	            var lang = arguments[0],
-	                newHash = arguments[1];
-	            if (arguments.length === 1) {
-	                newHash = lang;
-	                lang = null;
-	            }
-	            for (var k in newHash) {
-	                if (lang === null) {
-	                    for (var k1 in newHash[k]) {
-	                        _setKeyText(k, k1, newHash[k][k1], this);
-	                    }
-	                } else {
-	                    _setKeyText(lang, k, newHash[k], this);
-	                }
-	            }
-	            return this;
-	        },
-	
-	        getText: function getText(key) {
-	            var lang = L.gmxLocale.getLanguage(),
-	                locale = this[lang] || {};
-	
-	            var keyArr = key ? key.split(/\./) : [];
-	            for (var i = 0, len = keyArr.length; i < len; i++) {
-	                if (!locale) {
-	                    break;
-	                }
-	                locale = locale[keyArr[i]];
-	            }
-	            return locale;
-	        }
-	    };
-	    L.extend(L.gmxLocale, L.gmxLocaleMixin);
-	})();
-
-/***/ },
-/* 11 */
-/***/ function(module, exports) {
-
-	'use strict';
-	
-	L.extend(L.gmxLocale, {
-	    rus: {
-	        Coordinates: 'Координаты',
-	        Length: 'Длина',
-	        nodeLength: 'Длина от начала',
-	        edgeLength: 'Длина сегмента',
-	        Area: 'Площадь',
-	        Perimeter: 'Периметр',
-	        units: {
-	            m: 'м',
-	            nm: 'м.мили',
-	            km: 'км',
-	            m2: 'кв. м',
-	            km2: 'кв. км',
-	            ha: 'га',
-	            m2html: 'м<sup>2',
-	            km2html: 'км<sup>2'
-	        }
-	    }
-	});
-
-/***/ },
-/* 12 */
-/***/ function(module, exports) {
-
-	'use strict';
-	
-	L.extend(L.gmxLocale, {
-	    eng: {
-	        Coordinates: 'Coordinates',
-	        Length: 'Length',
-	        nodeLength: 'From start point',
-	        edgeLength: 'Segment length',
-	        Area: 'Area',
-	        Perimeter: 'Perimeter',
-	        units: {
-	            m: 'm',
-	            nm: 'nmi',
-	            km: 'km',
-	            m2: 'sq. m',
-	            km2: 'sq. km',
-	            ha: 'ha',
-	            m2html: 'm<sup>2',
-	            km2html: 'km<sup>2'
-	        }
-	    }
-	});
-
-/***/ },
-/* 13 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-	
-	Object.defineProperty(exports, "__esModule", {
-	    value: true
-	});
-	exports.gmxVectorTileLoader = undefined;
-	
-	var _Utils = __webpack_require__(4);
-	
-	var gmxVectorTileLoader = {
-	    _loadedTiles: {},
-	    _getKey: function _getKey(ti) {
-	        return [ti.layerID, ti.x, ti.y, ti.z, typeof ti.d === 'undefined' ? -1 : ti.d, typeof ti.s === 'undefined' ? -1 : ti.s, ti.v].join(':');
-	    },
-	    load: function load(tileSenderPrefix, tileInfo) {
-	        var key = gmxVectorTileLoader._getKey(tileInfo);
-	
-	        if (!this._loadedTiles[key]) {
-	            var def = new L.gmx.Deferred();
-	            this._loadedTiles[key] = def;
-	
-	            var requestParams = {
-	                ModeKey: 'tile',
-	                r: 'j',
-	                LayerName: tileInfo.layerID,
-	                z: tileInfo.z,
-	                x: tileInfo.x,
-	                y: tileInfo.y,
-	                v: tileInfo.v
-	            };
-	
-	            if (tileInfo.d !== -1) {
-	                requestParams.Level = tileInfo.d;
-	                requestParams.Span = tileInfo.s;
-	            }
-	
-	            _Utils.gmxAPIutils.requestJSONP(tileSenderPrefix, requestParams, { callbackParamName: null }).then(null, function () {
-	                def.reject();
-	            });
-	        }
-	
-	        return this._loadedTiles[key];
-	    }
-	};
-	
-	window.gmxAPI = window.gmxAPI || {};
-	window.gmxAPI._vectorTileReceiver = window.gmxAPI._vectorTileReceiver || function (data) {
-	    var key = gmxVectorTileLoader._getKey({
-	        layerID: data.LayerName,
-	        x: data.x,
-	        y: data.y,
-	        z: data.z,
-	        d: data.level,
-	        s: data.span,
-	        v: data.v
-	    });
-	
-	    gmxVectorTileLoader._loadedTiles[key] && gmxVectorTileLoader._loadedTiles[key].resolve(data.values, data.bbox);
-	};
-	exports.gmxVectorTileLoader = gmxVectorTileLoader;
-
-/***/ },
-/* 14 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-	
-	Object.defineProperty(exports, "__esModule", {
-	    value: true
-	});
-	exports.VectorTile = undefined;
-	
-	var _Utils = __webpack_require__(4);
-	
-	//Single vector tile, received from GeoMixer server
-	//  dataProvider: has single method "load": function(x, y, z, v, s, d, callback), which calls "callback" with the following parameters:
-	//      - {Object[]} data - information about vector objects in tile
-	//      - {Number[4]} [bbox] - optional bbox of objects in tile
-	//  options:
-	//      x, y, z, v, s, d: GeoMixer vector tile point
-	//      dateZero: zero Date for temporal layers
-	//      isGeneralized: flag for generalized tile
-	var VectorTile = function VectorTile(dataProvider, options) {
-	    this.dataProvider = dataProvider;
-	    this.loadDef = new L.gmx.Deferred();
-	    this.data = null;
-	    this.dataOptions = null;
-	
-	    this.x = options.x;
-	    this.y = options.y;
-	    this.z = options.z;
-	    this.v = options.v;
-	    this.s = options.s || -1;
-	    this.d = options.d || -1;
-	    this.isGeneralized = options.isGeneralized;
-	    this.isFlatten = options.isFlatten;
-	    this.bounds = _Utils.gmxAPIutils.getTileBounds(this.x, this.y, this.z);
-	    this.gmxTilePoint = { x: this.x, y: this.y, z: this.z, s: this.s, d: this.d };
-	    this.vectorTileKey = VectorTile.makeTileKey(this.x, this.y, this.z, this.v, this.s, this.d);
-	
-	    if (this.s >= 0 && options.dateZero) {
-	        this.beginDate = new Date(options.dateZero.valueOf() + this.s * this.d * _Utils.gmxAPIutils.oneDay * 1000);
-	        this.endDate = new Date(options.dateZero.valueOf() + (this.s + 1) * this.d * _Utils.gmxAPIutils.oneDay * 1000);
-	    }
-	
-	    this.state = 'notLoaded'; //notLoaded, loading, loaded
-	};
-	
-	VectorTile.prototype = {
-	    addData: function addData(data, keys) {
-	
-	        if (keys) {
-	            this.removeData(keys, true);
-	        }
-	
-	        var len = data.length,
-	            dataOptions = new Array(len),
-	            dataBounds = _Utils.gmxAPIutils.bounds();
-	        for (var i = 0; i < len; i++) {
-	            var dataOption = this._parseItem(data[i]);
-	            dataOptions[i] = dataOption;
-	            dataBounds.extendBounds(dataOption.bounds);
-	        }
-	
-	        if (!this.data) {
-	            this.data = data;
-	            this.dataOptions = dataOptions;
-	        } else {
-	            this.data = this.data.concat(data);
-	            this.dataOptions = this.dataOptions.concat(dataOptions);
-	        }
-	
-	        this.state = 'loaded';
-	
-	        this.loadDef.resolve(this.data);
-	        return dataBounds;
-	    },
-	
-	    removeData: function removeData(keys) {
-	        for (var arr = this.data || [], i = arr.length - 1; i >= 0; i--) {
-	            if (keys[arr[i][0]]) {
-	                arr.splice(i, 1);
-	                if (this.dataOptions) {
-	                    this.dataOptions.splice(i, 1);
-	                }
-	            }
-	        }
-	    },
-	
-	    load: function load() {
-	        if (this.state === 'notLoaded') {
-	            this.state = 'loading';
-	            var _this = this;
-	            this.dataProvider.load(_this.x, _this.y, _this.z, _this.v, _this.s, _this.d, function (data, bbox) {
-	                _this.bbox = bbox;
-	                _this.addData(data);
-	            });
-	        }
-	
-	        return this.loadDef;
-	    },
-	
-	    clear: function clear() {
-	        this.state = 'notLoaded';
-	        this.data = null;
-	        this.dataOptions = null;
-	
-	        this.loadDef = new L.gmx.Deferred();
-	    },
-	
-	    _parseItem: function _parseItem(it) {
-	        var len = it.length,
-	            i;
-	
-	        // TODO: old properties null = ''
-	        for (i = 0; i < len; i++) {
-	            if (it[i] === null) {
-	                it[i] = '';
-	            }
-	        }
-	
-	        var geo = it[len - 1],
-	            needFlatten = this.isFlatten,
-	            type = geo.type,
-	            isLikePolygon = type.indexOf('POLYGON') !== -1 || type.indexOf('Polygon') !== -1,
-	            isPolygon = type === 'POLYGON' || type === 'Polygon',
-	            coords = geo.coordinates,
-	            hiddenLines = [],
-	            bounds = null,
-	            boundsArr = [];
-	
-	        if (isLikePolygon) {
-	            if (isPolygon) {
-	                coords = [coords];
-	            }
-	            bounds = _Utils.gmxAPIutils.bounds();
-	            var edgeBounds = _Utils.gmxAPIutils.bounds().extendBounds(this.bounds).addBuffer(-0.05),
-	                hiddenFlag = false;
-	            for (i = 0, len = coords.length; i < len; i++) {
-	                var arr = [],
-	                    hiddenLines1 = [];
-	
-	                for (var j = 0, len1 = coords[i].length; j < len1; j++) {
-	                    if (needFlatten && typeof coords[i][j][0] !== 'number') {
-	                        coords[i][j] = _Utils.gmxAPIutils.flattenRing(coords[i][j]);
-	                    }
-	                    var b = _Utils.gmxAPIutils.bounds(coords[i][j]);
-	                    arr.push(b);
-	                    if (j === 0) {
-	                        bounds.extendBounds(b);
-	                    }
-	                    // EdgeLines calc
-	                    var edgeArr = _Utils.gmxAPIutils.getHidden(coords[i][j], edgeBounds);
-	                    hiddenLines1.push(edgeArr);
-	                    if (edgeArr.length) {
-	                        hiddenFlag = true;
-	                    }
-	                }
-	                boundsArr.push(arr);
-	                hiddenLines.push(hiddenLines1);
-	            }
-	            if (!hiddenFlag) {
-	                hiddenLines = null;
-	            }
-	            if (isPolygon) {
-	                boundsArr = boundsArr[0];
-	            }
-	        } else if (type === 'POINT' || type === 'Point') {
-	            bounds = _Utils.gmxAPIutils.bounds([coords]);
-	        } else if (type === 'MULTIPOINT' || type === 'MultiPoint') {
-	            bounds = _Utils.gmxAPIutils.bounds();
-	            for (i = 0, len = coords.length; i < len; i++) {
-	                bounds.extendBounds(_Utils.gmxAPIutils.bounds([coords[i]]));
-	            }
-	        } else if (type === 'LINESTRING' || type === 'LineString') {
-	            bounds = _Utils.gmxAPIutils.bounds(coords);
-	        } else if (type === 'MULTILINESTRING' || type === 'MultiLineString') {
-	            bounds = _Utils.gmxAPIutils.bounds();
-	            for (i = 0, len = coords.length; i < len; i++) {
-	                bounds.extendBounds(_Utils.gmxAPIutils.bounds(coords[i]));
-	            }
-	        }
-	        var dataOption = {
-	            bounds: bounds,
-	            boundsArr: boundsArr
-	        };
-	        if (hiddenLines) {
-	            dataOption.hiddenLines = hiddenLines;
-	        }
-	        return dataOption;
-	    }
-	};
-	//class methods
-	
-	VectorTile.makeTileKey = function (x, y, z, v, s, d) {
-	    return z + '_' + x + '_' + y + '_' + v + '_' + s + '_' + d;
-	};
-	
-	VectorTile.createTileKey = function (opt) {
-	    return [opt.z, opt.x, opt.y, opt.v, opt.s, opt.d].join('_');
-	};
-	
-	VectorTile.parseTileKey = function (gmxTileKey) {
-	    var p = gmxTileKey.split('_').map(function (it) {
-	        return Number(it);
-	    });
-	    return { z: p[0], x: p[1], y: p[2], v: p[3], s: p[4], d: p[5] };
-	};
-	
-	VectorTile.boundsFromTileKey = function (gmxTileKey) {
-	    var p = VectorTile.parseTileKey(gmxTileKey);
-	    return _Utils.gmxAPIutils.getTileBounds(p.x, p.y, p.z);
-	};
-	exports.VectorTile = VectorTile;
-
-/***/ },
-/* 15 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-	
-	Object.defineProperty(exports, "__esModule", {
-	    value: true
-	});
-	exports.Observer = undefined;
-	
-	var _Utils = __webpack_require__(4);
-	
-	var Observer = L.Class.extend({
-	    includes: L.Mixin.Events,
-	    /* options : {
-	            type: 'resend | update',    // `resend` - send all data (like screen tile observer)
-	                                        // `update` - send only changed data
-	            callback: Func,             // will be called when layer's data for this observer is changed
-	            dateInterval: [dateBegin,dateEnd], // temporal interval
-	            bbox: bbox,                 // bbox to observe on Mercator
-	            filters: [String]           // filter keys array
-	            active: [Boolean=true]      // is this observer active
-	            targetZoom: [Number]        // for zoom generalized type default(null)
-	        }
-	    */
-	    initialize: function initialize(options) {
-	        this.type = options.type || 'update';
-	        this._callback = options.callback;
-	        this._items = null;
-	        this.bbox = options.bbox; // set bbox by Mercator bounds
-	        this.filters = options.filters || [];
-	        this.targetZoom = options.targetZoom || null;
-	        this.active = 'active' in options ? options.active : true;
-	
-	        if (options.bounds) {
-	            // set bbox by LatLngBounds
-	            this.setBounds(options.bounds);
-	        }
-	
-	        var w = _Utils.gmxAPIutils.worldWidthMerc,
-	            dx;
-	        if (!this.bbox) {
-	            this.bbox = _Utils.gmxAPIutils.bounds([[-w, -w], [w, w]]);
-	            this.world = true;
-	        } else if (this.bbox.max.x > w) {
-	            dx = this.bbox.max.x - w;
-	            this.bbox1 = _Utils.gmxAPIutils.bounds([[dx - w, this.bbox.max.y], [-(dx + w), this.bbox.min.y]]);
-	        } else if (this.bbox.min.x < -w) {
-	            dx = this.bbox.min.x + w;
-	            this.bbox1 = _Utils.gmxAPIutils.bounds([[dx + w, this.bbox.max.y], [w - dx, this.bbox.min.y]]);
-	        }
-	
-	        if (options.dateInterval) {
-	            this._setDateInterval(options.dateInterval[0], options.dateInterval[1]);
-	        }
-	    },
-	
-	    hasFilter: function hasFilter(filterName) {
-	        for (var i = 0, len = this.filters.length; i < len; i++) {
-	            if (this.filters[i] === filterName) {
-	                return true;
-	            }
-	        }
-	        return false;
-	    },
-	
-	    activate: function activate() {
-	        if (!this.active) {
-	            this.active = true;
-	            this.fire('activate');
-	        }
-	        return this;
-	    },
-	
-	    deactivate: function deactivate() {
-	        if (this.active) {
-	            this.active = false;
-	            this.fire('activate');
-	        }
-	        return this;
-	    },
-	
-	    toggleActive: function toggleActive(isActive) {
-	        return isActive ? this.activate() : this.deactivate();
-	    },
-	
-	    isActive: function isActive() {
-	        return this.active;
-	    },
-	
-	    updateData: function updateData(data) {
-	        var len = data.length,
-	            out = { count: len };
-	
-	        if (this.type === 'update') {
-	            //calculate difference with previous data
-	            if (!this._items) {
-	                this._items = {};
-	            }
-	            var prevItems = this._items,
-	                newItems = {},
-	                added = [],
-	                removed = [],
-	                key;
-	
-	            for (var i = 0; i < len; i++) {
-	                var it = data[i];
-	
-	                key = it.id + '_' + it.tileKey;
-	
-	                newItems[key] = it;
-	
-	                if (!prevItems[key]) {
-	                    added.push(it);
-	                }
-	            }
-	
-	            for (key in prevItems) {
-	                if (!newItems[key]) {
-	                    removed.push(prevItems[key]);
-	                }
-	            }
-	
-	            if (added.length) {
-	                out.added = added;
-	            }
-	            if (removed.length) {
-	                out.removed = removed;
-	            }
-	
-	            this._items = newItems;
-	        } else {
-	            out.added = data;
-	        }
-	        this._callback(out);
-	        out = null;
-	        data = null;
-	
-	        return this;
-	    },
-	
-	    removeData: function removeData(keys) {
-	        if (this.type !== 'update' || !this._items) {
-	            return this;
-	        }
-	
-	        var items = this._items,
-	            removed = [];
-	
-	        for (var id in keys) {
-	            if (items[id]) {
-	                removed.push(items[id]);
-	                delete items[id];
-	            }
-	        }
-	
-	        if (removed.length) {
-	            this._callback({ removed: removed });
-	        }
-	
-	        return this;
-	    },
-	
-	    /*setFilter: function (func) {
-	        this._filters.userFilter = func;
-	        this.fire('update');
-	        return this;
-	    },
-	      removeFilter: function () {
-	        delete this._filters.userFilter;
-	        this.fire('update');
-	        return this;
-	    },*/
-	
-	    setBounds: function setBounds(bounds) {
-	        var w;
-	        if (!bounds) {
-	            if (!this.world) {
-	                w = _Utils.gmxAPIutils.worldWidthMerc;
-	                this.bbox = _Utils.gmxAPIutils.bounds([[-w, -w], [w, w]]);
-	                this.bbox1 = null;
-	                this.world = true;
-	                this.fire('update');
-	            }
-	            return this;
-	        }
-	
-	        var min = bounds.min,
-	            max = bounds.max;
-	        if (!min || !max) {
-	            var latLngBounds = L.latLngBounds(bounds),
-	                sw = latLngBounds.getSouthWest(),
-	                ne = latLngBounds.getNorthEast();
-	            min = { x: sw.lng, y: sw.lat };
-	            max = { x: ne.lng, y: ne.lat };
-	        }
-	        var minX = min.x,
-	            maxX = max.x,
-	            minY = min.y,
-	            maxY = max.y,
-	            minX1 = null,
-	            maxX1 = null;
-	
-	        this.world = false;
-	        w = (maxX - minX) / 2;
-	        if (w >= 180) {
-	            minX = -180;maxX = 180;
-	            this.world = true;
-	        } else if (maxX > 180 || minX < -180) {
-	            var center = (maxX + minX) / 2 % 360;
-	            if (center > 180) {
-	                center -= 360;
-	            } else if (center < -180) {
-	                center += 360;
-	            }
-	            minX = center - w;maxX = center + w;
-	            if (minX < -180) {
-	                minX1 = minX + 360;maxX1 = 180;minX = -180;
-	            } else if (maxX > 180) {
-	                minX1 = -180;maxX1 = maxX - 360;maxX = 180;
-	            }
-	        }
-	        var m1 = L.Projection.Mercator.project(L.latLng(minY, minX)),
-	            m2 = L.Projection.Mercator.project(L.latLng(maxY, maxX));
-	
-	        this.bbox = _Utils.gmxAPIutils.bounds([[m1.x, m1.y], [m2.x, m2.y]]);
-	        this.bbox1 = null;
-	        if (minX1) {
-	            m1 = L.Projection.Mercator.project(L.latLng(minY, minX1));
-	            m2 = L.Projection.Mercator.project(L.latLng(maxY, maxX1));
-	            this.bbox1 = _Utils.gmxAPIutils.bounds([[m1.x, m1.y], [m2.x, m2.y]]);
-	        }
-	
-	        this.fire('update');
-	        return this;
-	    },
-	
-	    intersects: function intersects(bounds) {
-	        return this.world || this.bbox.intersects(bounds) || !!(this.bbox1 && this.bbox1.intersects(bounds));
-	    },
-	
-	    intersectsWithTile: function intersectsWithTile(tile) {
-	        if (this.targetZoom) {
-	            var z = this.targetZoom + (this.targetZoom % 2 ? 1 : 0);
-	            if (tile.isGeneralized && tile.z !== z || tile.z > z) {
-	                return false;
-	            }
-	        }
-	        var di = this.dateInterval;
-	        return this.intersects(tile.bounds) && (!tile.beginDate || di && di.endDate >= tile.beginDate && di.beginDate <= tile.endDate);
-	    },
-	
-	    _setDateInterval: function _setDateInterval(beginDate, endDate) {
-	        if (beginDate && endDate) {
-	            // var beginValue = beginDate.valueOf(),
-	            // endValue = endDate.valueOf();
-	            this.dateInterval = {
-	                beginDate: beginDate,
-	                endDate: endDate
-	            };
-	        } else {
-	            this.dateInterval = null;
-	        }
-	    },
-	
-	    setDateInterval: function setDateInterval(beginDate, endDate) {
-	        var isValid = beginDate && endDate;
-	
-	        if (!this.dateInterval !== !isValid || isValid && (this.dateInterval.beginDate.valueOf() !== beginDate.valueOf() || this.dateInterval.endDate.valueOf() !== endDate.valueOf())) {
-	            this._setDateInterval(beginDate, endDate);
-	            this.fire('update', { temporalFilter: true });
-	        }
-	        return this;
-	    }
-	}); //Single observer with vector data
-	exports.Observer = Observer;
-
-/***/ },
-/* 16 */
-/***/ function(module, exports) {
-
-	'use strict';
-	
-	(function () {
-	    //tree for fast tiles selection inside temporal interval
-	    //  options:
-	    //      TemporalTiles: tilePoints array
-	    //      TemporalVers: tiles version array
-	    //      TemporalPeriods: periods
-	    //      ZeroDate: start Date
-	    var TilesTree = function TilesTree(options) {
-	        var _rootNodes = [],
-	            tiles = options.TemporalTiles || [],
-	            vers = options.TemporalVers || [],
-	            periods = options.TemporalPeriods || [],
-	            maxPeriod = periods[periods.length - 1],
-	            smin = Number.MAX_VALUE,
-	            arr = options.ZeroDate.split('.'),
-	            zn = new Date(arr.length > 2 ? arr[2] : 2008, arr.length > 1 ? arr[1] - 1 : 0, arr.length > 0 ? arr[0] : 1),
-	            dateZero = new Date(zn.getTime() - zn.getTimezoneOffset() * 60000),
-	            zeroUT = dateZero.getTime() / 1000;
-	
-	        this.dateZero = dateZero;
-	
-	        var addTile = function addTile(node, tile, key) {
-	            var d = node.d;
-	            if (tile.d === periods[d]) {
-	                node.count++;
-	                node.tiles.push(key);
-	                return;
-	            }
-	
-	            var pd = periods[d - 1],
-	                childrenCount = periods[d] / pd;
-	
-	            if (!('children' in node)) {
-	                node.children = new Array(childrenCount);
-	            }
-	
-	            var sChild = Math.floor(tile.s * tile.d / pd),
-	                ds = sChild - node.s * childrenCount;
-	
-	            if (!node.children[ds]) {
-	                var pdOneDay = pd * gmxAPIutils.oneDay,
-	                    t1 = sChild * pdOneDay + zeroUT;
-	                node.children[ds] = {
-	                    d: d - 1,
-	                    s: sChild,
-	                    t1: t1,
-	                    t2: t1 + pdOneDay,
-	                    count: 0,
-	                    children: [],
-	                    tiles: []
-	                };
-	            }
-	
-	            addTile(node.children[ds], tile, key);
-	        };
-	
-	        var dmax = periods.length - 1,
-	            dmaxOneDay = periods[dmax] * gmxAPIutils.oneDay,
-	            i,
-	            len;
-	
-	        for (i = 0, len = tiles.length; i < len; i++) {
-	            arr = tiles[i];
-	            var s = Number(arr[1]),
-	                d = Number(arr[0]);
-	
-	            if (d === maxPeriod) {
-	                smin = Math.min(smin, s);
-	            }
-	        }
-	        for (i = 0, len = tiles.length; i < len; i++) {
-	            arr = tiles[i];
-	            var t = {
-	                x: Number(arr[2]),
-	                y: Number(arr[3]),
-	                z: Number(arr[4]),
-	                v: Number(vers[i]),
-	                s: Number(arr[1]),
-	                d: Number(arr[0])
-	            };
-	            if (t.d < 0) {
-	                continue;
-	            }
-	
-	            var ds = Math.floor(t.s * t.d / periods[dmax]) - smin,
-	                cs = ds + smin;
-	
-	            _rootNodes[ds] = _rootNodes[ds] || {
-	                d: dmax,
-	                s: cs,
-	                t1: cs * dmaxOneDay + zeroUT,
-	                t2: (cs + 1) * dmaxOneDay + zeroUT,
-	                count: 0,
-	                tiles: []
-	            };
-	            var key = VectorTile.createTileKey(t);
-	
-	            addTile(_rootNodes[ds], t, key);
-	        }
-	        tiles = vers = null;
-	
-	        //options: bounds (in mercator projection)
-	        this.selectTiles = function (t1, t2, options) {
-	
-	            options = options || {};
-	
-	            var t1Val = t1.valueOf() / 1000,
-	                t2Val = t2.valueOf() / 1000;
-	
-	            // We will restrict tile levels by the nearest two levels to target date interval length
-	            // For example, if date interval length is 3 days, we wll search tiles among 1-day and 4-day tiles
-	            var minLevel = 0,
-	                dateIntervalLength = (t2Val - t1Val) / 3600 / 24;
-	
-	            for (var i = 0; i < periods.length; i++) {
-	                if (periods[i] > dateIntervalLength) {
-	                    minLevel = Math.max(0, i - 1);
-	                    break;
-	                }
-	            }
-	
-	            if (periods[periods.length - 1] <= dateIntervalLength) {
-	                minLevel = periods.length - 1;
-	            }
-	
-	            var maxLevel = Math.min(periods.length - 1, minLevel + Number(dateIntervalLength > periods[minLevel]));
-	
-	            var getCountOfIntersected = function getCountOfIntersected(tileBounds, bounds) {
-	                var count = 0;
-	                for (var t = 0; t < tileBounds.length; t++) {
-	                    if (tileBounds[t].intersects(bounds)) {
-	                        count++;
-	                    }
-	                }
-	
-	                return count;
-	            };
-	
-	            // --------------------
-	            var selectTilesForNode = function selectTilesForNode(node, t1, t2) {
-	                if (t1 >= node.t2 || t2 <= node.t1) {
-	                    return { count: 0, tiles: [], nodes: [] };
-	                }
-	
-	                if (options.bounds && !node.tileBounds) {
-	                    node.tileBounds = node.tiles.map(function (it) {
-	                        return VectorTile.boundsFromTileKey(it);
-	                    });
-	                }
-	
-	                if (node.d === minLevel) {
-	                    var count = options.bounds ? getCountOfIntersected(node.tileBounds, options.bounds) : node.count;
-	                    return {
-	                        tiles: node.tiles,
-	                        count: count,
-	                        nodes: [node]
-	                    };
-	                }
-	
-	                var childrenCount = 0,
-	
-	                //number of tiles if we use shorter intervals
-	                childrenRes = [],
-	                    len = node.children ? node.children.length : 0,
-	                    ds;
-	
-	                for (ds = 0; ds < len; ds++) {
-	                    if (node.children[ds]) {
-	                        childrenRes[ds] = selectTilesForNode(node.children[ds], Math.max(t1, node.t1), Math.min(t2, node.t2));
-	                    } else {
-	                        childrenRes[ds] = { count: 0, tiles: [], nodes: [] };
-	                    }
-	                    childrenCount += childrenRes[ds].count;
-	                }
-	
-	                var intersectCount = options.bounds ? getCountOfIntersected(node.tileBounds, options.bounds) : node.count;
-	
-	                if (node.d > maxLevel || childrenCount < intersectCount) {
-	                    var resTilesArr = [],
-	                        resNodesArr = [];
-	                    for (ds = 0; ds < childrenRes.length; ds++) {
-	                        resNodesArr.push(childrenRes[ds].nodes);
-	                        resTilesArr.push(childrenRes[ds].tiles);
-	                    }
-	
-	                    return {
-	                        tiles: [].concat.apply([], resTilesArr),
-	                        count: childrenCount,
-	                        nodes: [].concat.apply([], resNodesArr)
-	                    };
-	                } else {
-	                    return {
-	                        tiles: node.tiles,
-	                        count: intersectCount,
-	                        nodes: [node]
-	                    };
-	                }
-	            };
-	
-	            var resTiles = [];
-	            for (var ds = 0; ds < _rootNodes.length; ds++) {
-	                if (_rootNodes[ds]) {
-	                    var nodeSelection = selectTilesForNode(_rootNodes[ds], t1Val, t2Val);
-	                    if (nodeSelection.tiles.length) {
-	                        resTiles = resTiles.concat(nodeSelection.tiles);
-	                    }
-	                }
-	            }
-	
-	            var resTilesHash = {};
-	            for (var t = 0; t < resTiles.length; t++) {
-	                resTilesHash[resTiles[t]] = true;
-	            }
-	
-	            return { tiles: resTilesHash };
-	        };
-	
-	        this.getNode = function (d, s) {
-	            if (d < 0 || s < 0) {
-	                return null;
-	            }
-	
-	            var findNode = function findNode(node, d, s) {
-	                if (!node) {
-	                    return null;
-	                }
-	
-	                if (periods[node.d] === d) {
-	                    return node.s === s ? node : null;
-	                }
-	
-	                var childrenCount = periods[node.d] / periods[node.d - 1];
-	                var sChild = Math.floor(s * d / periods[node.d - 1]);
-	                var ds = sChild - node.s * childrenCount;
-	
-	                return node.children[ds] ? findNode(node.children[ds], d, s) : null;
-	            };
-	
-	            for (var ds = 0; ds < _rootNodes.length; ds++) {
-	                var node = findNode(_rootNodes[ds], d, s);
-	                if (node) {
-	                    return node;
-	                }
-	            }
-	
-	            return null;
-	        };
-	    };
-	    L.gmx.tilesTree = function (options) {
-	        return new TilesTree(options);
-	    };
-	})();
-
-/***/ },
-/* 17 */
 /***/ function(module, exports, __webpack_require__) {
 
 	'use strict';
@@ -5839,9 +4746,9 @@
 	
 	var _Utils = __webpack_require__(4);
 	
-	var _VectorTile = __webpack_require__(14);
+	var _VectorTile = __webpack_require__(10);
 	
-	var _VectorTileLoader = __webpack_require__(13);
+	var _VectorTileLoader = __webpack_require__(11);
 	
 	var ObserverTileLoader = L.Class.extend({
 	    includes: L.Mixin.Events,
@@ -6914,6 +5821,1119 @@
 	
 	});
 	exports.DataManager = DataManager;
+
+/***/ },
+/* 10 */
+/***/ function(module, exports, __webpack_require__) {
+
+	'use strict';
+	
+	Object.defineProperty(exports, "__esModule", {
+	    value: true
+	});
+	exports.VectorTile = undefined;
+	
+	var _Utils = __webpack_require__(4);
+	
+	//Single vector tile, received from GeoMixer server
+	//  dataProvider: has single method "load": function(x, y, z, v, s, d, callback), which calls "callback" with the following parameters:
+	//      - {Object[]} data - information about vector objects in tile
+	//      - {Number[4]} [bbox] - optional bbox of objects in tile
+	//  options:
+	//      x, y, z, v, s, d: GeoMixer vector tile point
+	//      dateZero: zero Date for temporal layers
+	//      isGeneralized: flag for generalized tile
+	var VectorTile = function VectorTile(dataProvider, options) {
+	    this.dataProvider = dataProvider;
+	    this.loadDef = new L.gmx.Deferred();
+	    this.data = null;
+	    this.dataOptions = null;
+	
+	    this.x = options.x;
+	    this.y = options.y;
+	    this.z = options.z;
+	    this.v = options.v;
+	    this.s = options.s || -1;
+	    this.d = options.d || -1;
+	    this.isGeneralized = options.isGeneralized;
+	    this.isFlatten = options.isFlatten;
+	    this.bounds = _Utils.gmxAPIutils.getTileBounds(this.x, this.y, this.z);
+	    this.gmxTilePoint = { x: this.x, y: this.y, z: this.z, s: this.s, d: this.d };
+	    this.vectorTileKey = VectorTile.makeTileKey(this.x, this.y, this.z, this.v, this.s, this.d);
+	
+	    if (this.s >= 0 && options.dateZero) {
+	        this.beginDate = new Date(options.dateZero.valueOf() + this.s * this.d * _Utils.gmxAPIutils.oneDay * 1000);
+	        this.endDate = new Date(options.dateZero.valueOf() + (this.s + 1) * this.d * _Utils.gmxAPIutils.oneDay * 1000);
+	    }
+	
+	    this.state = 'notLoaded'; //notLoaded, loading, loaded
+	};
+	
+	VectorTile.prototype = {
+	    addData: function addData(data, keys) {
+	
+	        if (keys) {
+	            this.removeData(keys, true);
+	        }
+	
+	        var len = data.length,
+	            dataOptions = new Array(len),
+	            dataBounds = _Utils.gmxAPIutils.bounds();
+	        for (var i = 0; i < len; i++) {
+	            var dataOption = this._parseItem(data[i]);
+	            dataOptions[i] = dataOption;
+	            dataBounds.extendBounds(dataOption.bounds);
+	        }
+	
+	        if (!this.data) {
+	            this.data = data;
+	            this.dataOptions = dataOptions;
+	        } else {
+	            this.data = this.data.concat(data);
+	            this.dataOptions = this.dataOptions.concat(dataOptions);
+	        }
+	
+	        this.state = 'loaded';
+	
+	        this.loadDef.resolve(this.data);
+	        return dataBounds;
+	    },
+	
+	    removeData: function removeData(keys) {
+	        for (var arr = this.data || [], i = arr.length - 1; i >= 0; i--) {
+	            if (keys[arr[i][0]]) {
+	                arr.splice(i, 1);
+	                if (this.dataOptions) {
+	                    this.dataOptions.splice(i, 1);
+	                }
+	            }
+	        }
+	    },
+	
+	    load: function load() {
+	        if (this.state === 'notLoaded') {
+	            this.state = 'loading';
+	            var _this = this;
+	            this.dataProvider.load(_this.x, _this.y, _this.z, _this.v, _this.s, _this.d, function (data, bbox) {
+	                _this.bbox = bbox;
+	                _this.addData(data);
+	            });
+	        }
+	
+	        return this.loadDef;
+	    },
+	
+	    clear: function clear() {
+	        this.state = 'notLoaded';
+	        this.data = null;
+	        this.dataOptions = null;
+	
+	        this.loadDef = new L.gmx.Deferred();
+	    },
+	
+	    _parseItem: function _parseItem(it) {
+	        var len = it.length,
+	            i;
+	
+	        // TODO: old properties null = ''
+	        for (i = 0; i < len; i++) {
+	            if (it[i] === null) {
+	                it[i] = '';
+	            }
+	        }
+	
+	        var geo = it[len - 1],
+	            needFlatten = this.isFlatten,
+	            type = geo.type,
+	            isLikePolygon = type.indexOf('POLYGON') !== -1 || type.indexOf('Polygon') !== -1,
+	            isPolygon = type === 'POLYGON' || type === 'Polygon',
+	            coords = geo.coordinates,
+	            hiddenLines = [],
+	            bounds = null,
+	            boundsArr = [];
+	
+	        if (isLikePolygon) {
+	            if (isPolygon) {
+	                coords = [coords];
+	            }
+	            bounds = _Utils.gmxAPIutils.bounds();
+	            var edgeBounds = _Utils.gmxAPIutils.bounds().extendBounds(this.bounds).addBuffer(-0.05),
+	                hiddenFlag = false;
+	            for (i = 0, len = coords.length; i < len; i++) {
+	                var arr = [],
+	                    hiddenLines1 = [];
+	
+	                for (var j = 0, len1 = coords[i].length; j < len1; j++) {
+	                    if (needFlatten && typeof coords[i][j][0] !== 'number') {
+	                        coords[i][j] = _Utils.gmxAPIutils.flattenRing(coords[i][j]);
+	                    }
+	                    var b = _Utils.gmxAPIutils.bounds(coords[i][j]);
+	                    arr.push(b);
+	                    if (j === 0) {
+	                        bounds.extendBounds(b);
+	                    }
+	                    // EdgeLines calc
+	                    var edgeArr = _Utils.gmxAPIutils.getHidden(coords[i][j], edgeBounds);
+	                    hiddenLines1.push(edgeArr);
+	                    if (edgeArr.length) {
+	                        hiddenFlag = true;
+	                    }
+	                }
+	                boundsArr.push(arr);
+	                hiddenLines.push(hiddenLines1);
+	            }
+	            if (!hiddenFlag) {
+	                hiddenLines = null;
+	            }
+	            if (isPolygon) {
+	                boundsArr = boundsArr[0];
+	            }
+	        } else if (type === 'POINT' || type === 'Point') {
+	            bounds = _Utils.gmxAPIutils.bounds([coords]);
+	        } else if (type === 'MULTIPOINT' || type === 'MultiPoint') {
+	            bounds = _Utils.gmxAPIutils.bounds();
+	            for (i = 0, len = coords.length; i < len; i++) {
+	                bounds.extendBounds(_Utils.gmxAPIutils.bounds([coords[i]]));
+	            }
+	        } else if (type === 'LINESTRING' || type === 'LineString') {
+	            bounds = _Utils.gmxAPIutils.bounds(coords);
+	        } else if (type === 'MULTILINESTRING' || type === 'MultiLineString') {
+	            bounds = _Utils.gmxAPIutils.bounds();
+	            for (i = 0, len = coords.length; i < len; i++) {
+	                bounds.extendBounds(_Utils.gmxAPIutils.bounds(coords[i]));
+	            }
+	        }
+	        var dataOption = {
+	            bounds: bounds,
+	            boundsArr: boundsArr
+	        };
+	        if (hiddenLines) {
+	            dataOption.hiddenLines = hiddenLines;
+	        }
+	        return dataOption;
+	    }
+	};
+	//class methods
+	
+	VectorTile.makeTileKey = function (x, y, z, v, s, d) {
+	    return z + '_' + x + '_' + y + '_' + v + '_' + s + '_' + d;
+	};
+	
+	VectorTile.createTileKey = function (opt) {
+	    return [opt.z, opt.x, opt.y, opt.v, opt.s, opt.d].join('_');
+	};
+	
+	VectorTile.parseTileKey = function (gmxTileKey) {
+	    var p = gmxTileKey.split('_').map(function (it) {
+	        return Number(it);
+	    });
+	    return { z: p[0], x: p[1], y: p[2], v: p[3], s: p[4], d: p[5] };
+	};
+	
+	VectorTile.boundsFromTileKey = function (gmxTileKey) {
+	    var p = VectorTile.parseTileKey(gmxTileKey);
+	    return _Utils.gmxAPIutils.getTileBounds(p.x, p.y, p.z);
+	};
+	exports.VectorTile = VectorTile;
+
+/***/ },
+/* 11 */
+/***/ function(module, exports, __webpack_require__) {
+
+	'use strict';
+	
+	Object.defineProperty(exports, "__esModule", {
+	    value: true
+	});
+	exports.gmxVectorTileLoader = undefined;
+	
+	var _Utils = __webpack_require__(4);
+	
+	var gmxVectorTileLoader = {
+	    _loadedTiles: {},
+	    _getKey: function _getKey(ti) {
+	        return [ti.layerID, ti.x, ti.y, ti.z, typeof ti.d === 'undefined' ? -1 : ti.d, typeof ti.s === 'undefined' ? -1 : ti.s, ti.v].join(':');
+	    },
+	    load: function load(tileSenderPrefix, tileInfo) {
+	        var key = gmxVectorTileLoader._getKey(tileInfo);
+	
+	        if (!this._loadedTiles[key]) {
+	            var def = new L.gmx.Deferred();
+	            this._loadedTiles[key] = def;
+	
+	            var requestParams = {
+	                ModeKey: 'tile',
+	                r: 'j',
+	                LayerName: tileInfo.layerID,
+	                z: tileInfo.z,
+	                x: tileInfo.x,
+	                y: tileInfo.y,
+	                v: tileInfo.v
+	            };
+	
+	            if (tileInfo.d !== -1) {
+	                requestParams.Level = tileInfo.d;
+	                requestParams.Span = tileInfo.s;
+	            }
+	
+	            _Utils.gmxAPIutils.requestJSONP(tileSenderPrefix, requestParams, { callbackParamName: null }).then(null, function () {
+	                def.reject();
+	            });
+	        }
+	
+	        return this._loadedTiles[key];
+	    }
+	};
+	
+	window.gmxAPI = window.gmxAPI || {};
+	window.gmxAPI._vectorTileReceiver = window.gmxAPI._vectorTileReceiver || function (data) {
+	    var key = gmxVectorTileLoader._getKey({
+	        layerID: data.LayerName,
+	        x: data.x,
+	        y: data.y,
+	        z: data.z,
+	        d: data.level,
+	        s: data.span,
+	        v: data.v
+	    });
+	
+	    gmxVectorTileLoader._loadedTiles[key] && gmxVectorTileLoader._loadedTiles[key].resolve(data.values, data.bbox);
+	};
+	exports.gmxVectorTileLoader = gmxVectorTileLoader;
+
+/***/ },
+/* 12 */
+/***/ function(module, exports) {
+
+	'use strict';
+	
+	/*
+	 * gmxEventsManager - handlers manager
+	 */
+	var GmxEventsManager = L.Handler.extend({
+	    options: {},
+	
+	    initialize: function initialize(map) {
+	        this._map = map;
+	        this._layers = {};
+	        this._lastLayer = null;
+	        this._lastId = null;
+	        var _this = this;
+	        this._drawstart = null;
+	        this._lastCursor = '';
+	
+	        var isDrawing = function isDrawing() {
+	            if (_this._drawstart) {
+	                return true;
+	            } else if (_this._drawstart === null) {
+	                if (map.gmxControlsManager) {
+	                    var drawingControl = map.gmxControlsManager.get('drawing');
+	                    if (drawingControl) {
+	                        drawingControl.on('activechange', function (ev) {
+	                            _this._drawstart = ev.activeIcon;
+	                            map._container.style.cursor = _this._drawstart ? 'pointer' : '';
+	                        });
+	                    }
+	                }
+	                _this._drawstart = false;
+	            }
+	            return false;
+	        };
+	
+	        var getDomIndex = function getDomIndex(layer) {
+	            var container = layer._container;
+	            if (container) {
+	                var arr = container.parentNode.childNodes;
+	                for (var i = 0, len = arr.length; i < len; i++) {
+	                    if (container === arr[i]) {
+	                        return i;
+	                    }
+	                }
+	            }
+	            return 0;
+	        };
+	
+	        var skipNodeName = {
+	            IMG: true,
+	            DIV: true,
+	            path: true
+	        };
+	
+	        var clearLastHover = function clearLastHover() {
+	            if (_this._lastLayer) {
+	                _this._lastLayer.gmxEventCheck({ type: 'mousemove' }, true);
+	                _this._lastLayer = null;
+	            }
+	        };
+	
+	        var eventCheck = function eventCheck(ev) {
+	            var type = ev.type,
+	                map = _this._map,
+	                skipNode = false;
+	            if (ev.originalEvent) {
+	                map.gmxMouseDown = L.Browser.webkit ? ev.originalEvent.which : ev.originalEvent.buttons;
+	                var target = ev.originalEvent.target;
+	                skipNode = skipNodeName[target.nodeName] && !L.DomUtil.hasClass(target, 'leaflet-tile') && !L.DomUtil.hasClass(target, 'leaflet-popup-tip-container');
+	            }
+	            if (map._animatingZoom || isDrawing() || skipNode || type === 'click' && map._skipClick || // from drawing
+	            type === 'mousemove' && map.gmxMouseDown) {
+	                clearLastHover();
+	                map._skipClick = false;
+	                return;
+	            }
+	            if (ev.layerPoint) {
+	                map._gmxMouseLatLng = ev.latlng;
+	                map.gmxMousePos = map.getPixelOrigin().add(ev.layerPoint);
+	            }
+	
+	            var arr = Object.keys(_this._layers).sort(function (a, b) {
+	                var la = map._layers[a],
+	                    lb = map._layers[b];
+	                if (la && lb) {
+	                    var oa = la.options,
+	                        ob = lb.options,
+	                        za = (oa.zIndexOffset || 0) + (oa.zIndex || 0),
+	                        zb = (ob.zIndexOffset || 0) + (ob.zIndex || 0),
+	                        delta = zb - za;
+	                    return delta ? delta : _this._layers[b] - _this._layers[a];
+	                }
+	                return 0;
+	            });
+	
+	            var layer,
+	                foundLayer = null,
+	                cursor = '';
+	
+	            for (var i = 0, len = arr.length; i < len; i++) {
+	                var id = arr[i];
+	                layer = map._layers[id];
+	                if (layer && layer._map && !layer._animating && layer.options.clickable) {
+	                    if (layer.gmxEventCheck(ev)) {
+	                        if (layer.hasEventListeners('mouseover')) {
+	                            cursor = 'pointer';
+	                        }
+	                        foundLayer = layer;
+	                        break;
+	                    }
+	                }
+	            }
+	            if (_this._lastCursor !== cursor && !isDrawing()) {
+	                map._container.style.cursor = cursor;
+	            }
+	            _this._lastCursor = cursor;
+	
+	            if (type !== 'zoomend') {
+	                if (foundLayer) {
+	                    if (_this._lastLayer !== foundLayer) {
+	                        clearLastHover();
+	                    }
+	                    _this._lastLayer = foundLayer;
+	                } else {
+	                    clearLastHover();
+	                }
+	            }
+	        };
+	
+	        map.on({
+	            zoomend: function zoomend() {
+	                if (map._gmxMouseLatLng) {
+	                    setTimeout(function () {
+	                        eventCheck({ type: 'mousemove', latlng: map._gmxMouseLatLng });
+	                    }, 0);
+	                }
+	            },
+	            click: eventCheck,
+	            dblclick: eventCheck,
+	            mousedown: eventCheck,
+	            mouseup: eventCheck,
+	            mousemove: eventCheck,
+	            contextmenu: eventCheck,
+	            layeradd: function layeradd(ev) {
+	                var layer = ev.layer;
+	                if ('gmxEventCheck' in layer && layer.options.clickable) {
+	                    _this._layers[layer._leaflet_id] = getDomIndex(layer);
+	                }
+	            },
+	            layerremove: function layerremove(ev) {
+	                var id = ev.layer._leaflet_id;
+	                delete _this._layers[id];
+	                if (_this._lastLayer && _this._lastLayer._leaflet_id === id) {
+	                    _this._lastLayer = null;
+	                    _this._lastId = 0;
+	                }
+	            }
+	        }, this);
+	    }
+	});
+	
+	L.Map.addInitHook(function () {
+	    // Check to see if handler has already been initialized.
+	    if (!this._gmxEventsManager) {
+	        this._gmxEventsManager = new GmxEventsManager(this);
+	        this.isGmxDrawing = function () {
+	            return this._gmxEventsManager._drawstart;
+	        };
+	
+	        this.on('remove', function () {
+	            if (this._gmxEventsManager) {
+	                this._gmxEventsManager.removeHooks();
+	            }
+	        });
+	    }
+	});
+
+/***/ },
+/* 13 */
+/***/ function(module, exports) {
+
+	'use strict';
+	
+	(function () {
+	    var DEFAULT_LANGUAGE = 'rus',
+	        _setKeyText = function _setKeyText(lang, key, item, hash) {
+	        if (!hash[lang]) {
+	            hash[lang] = {};
+	        }
+	        hash[lang][key] = item;
+	    };
+	    L.gmxLocale = {
+	
+	        setLanguage: function setLanguage(lang) {
+	            this._language = lang;
+	        },
+	
+	        getLanguage: function getLanguage() {
+	            return window.language || this._language || DEFAULT_LANGUAGE;
+	        }
+	    };
+	
+	    L.gmxLocaleMixin = {
+	        addText: function addText() {
+	            var lang = arguments[0],
+	                newHash = arguments[1];
+	            if (arguments.length === 1) {
+	                newHash = lang;
+	                lang = null;
+	            }
+	            for (var k in newHash) {
+	                if (lang === null) {
+	                    for (var k1 in newHash[k]) {
+	                        _setKeyText(k, k1, newHash[k][k1], this);
+	                    }
+	                } else {
+	                    _setKeyText(lang, k, newHash[k], this);
+	                }
+	            }
+	            return this;
+	        },
+	
+	        getText: function getText(key) {
+	            var lang = L.gmxLocale.getLanguage(),
+	                locale = this[lang] || {};
+	
+	            var keyArr = key ? key.split(/\./) : [];
+	            for (var i = 0, len = keyArr.length; i < len; i++) {
+	                if (!locale) {
+	                    break;
+	                }
+	                locale = locale[keyArr[i]];
+	            }
+	            return locale;
+	        }
+	    };
+	    L.extend(L.gmxLocale, L.gmxLocaleMixin);
+	})();
+
+/***/ },
+/* 14 */
+/***/ function(module, exports) {
+
+	'use strict';
+	
+	L.extend(L.gmxLocale, {
+	    rus: {
+	        Coordinates: 'Координаты',
+	        Length: 'Длина',
+	        nodeLength: 'Длина от начала',
+	        edgeLength: 'Длина сегмента',
+	        Area: 'Площадь',
+	        Perimeter: 'Периметр',
+	        units: {
+	            m: 'м',
+	            nm: 'м.мили',
+	            km: 'км',
+	            m2: 'кв. м',
+	            km2: 'кв. км',
+	            ha: 'га',
+	            m2html: 'м<sup>2',
+	            km2html: 'км<sup>2'
+	        }
+	    }
+	});
+
+/***/ },
+/* 15 */
+/***/ function(module, exports) {
+
+	'use strict';
+	
+	L.extend(L.gmxLocale, {
+	    eng: {
+	        Coordinates: 'Coordinates',
+	        Length: 'Length',
+	        nodeLength: 'From start point',
+	        edgeLength: 'Segment length',
+	        Area: 'Area',
+	        Perimeter: 'Perimeter',
+	        units: {
+	            m: 'm',
+	            nm: 'nmi',
+	            km: 'km',
+	            m2: 'sq. m',
+	            km2: 'sq. km',
+	            ha: 'ha',
+	            m2html: 'm<sup>2',
+	            km2html: 'km<sup>2'
+	        }
+	    }
+	});
+
+/***/ },
+/* 16 */
+/***/ function(module, exports, __webpack_require__) {
+
+	'use strict';
+	
+	Object.defineProperty(exports, "__esModule", {
+	    value: true
+	});
+	exports.Observer = undefined;
+	
+	var _Utils = __webpack_require__(4);
+	
+	var Observer = L.Class.extend({
+	    includes: L.Mixin.Events,
+	    /* options : {
+	            type: 'resend | update',    // `resend` - send all data (like screen tile observer)
+	                                        // `update` - send only changed data
+	            callback: Func,             // will be called when layer's data for this observer is changed
+	            dateInterval: [dateBegin,dateEnd], // temporal interval
+	            bbox: bbox,                 // bbox to observe on Mercator
+	            filters: [String]           // filter keys array
+	            active: [Boolean=true]      // is this observer active
+	            targetZoom: [Number]        // for zoom generalized type default(null)
+	        }
+	    */
+	    initialize: function initialize(options) {
+	        this.type = options.type || 'update';
+	        this._callback = options.callback;
+	        this._items = null;
+	        this.bbox = options.bbox; // set bbox by Mercator bounds
+	        this.filters = options.filters || [];
+	        this.targetZoom = options.targetZoom || null;
+	        this.active = 'active' in options ? options.active : true;
+	
+	        if (options.bounds) {
+	            // set bbox by LatLngBounds
+	            this.setBounds(options.bounds);
+	        }
+	
+	        var w = _Utils.gmxAPIutils.worldWidthMerc,
+	            dx;
+	        if (!this.bbox) {
+	            this.bbox = _Utils.gmxAPIutils.bounds([[-w, -w], [w, w]]);
+	            this.world = true;
+	        } else if (this.bbox.max.x > w) {
+	            dx = this.bbox.max.x - w;
+	            this.bbox1 = _Utils.gmxAPIutils.bounds([[dx - w, this.bbox.max.y], [-(dx + w), this.bbox.min.y]]);
+	        } else if (this.bbox.min.x < -w) {
+	            dx = this.bbox.min.x + w;
+	            this.bbox1 = _Utils.gmxAPIutils.bounds([[dx + w, this.bbox.max.y], [w - dx, this.bbox.min.y]]);
+	        }
+	
+	        if (options.dateInterval) {
+	            this._setDateInterval(options.dateInterval[0], options.dateInterval[1]);
+	        }
+	    },
+	
+	    hasFilter: function hasFilter(filterName) {
+	        for (var i = 0, len = this.filters.length; i < len; i++) {
+	            if (this.filters[i] === filterName) {
+	                return true;
+	            }
+	        }
+	        return false;
+	    },
+	
+	    activate: function activate() {
+	        if (!this.active) {
+	            this.active = true;
+	            this.fire('activate');
+	        }
+	        return this;
+	    },
+	
+	    deactivate: function deactivate() {
+	        if (this.active) {
+	            this.active = false;
+	            this.fire('activate');
+	        }
+	        return this;
+	    },
+	
+	    toggleActive: function toggleActive(isActive) {
+	        return isActive ? this.activate() : this.deactivate();
+	    },
+	
+	    isActive: function isActive() {
+	        return this.active;
+	    },
+	
+	    updateData: function updateData(data) {
+	        var len = data.length,
+	            out = { count: len };
+	
+	        if (this.type === 'update') {
+	            //calculate difference with previous data
+	            if (!this._items) {
+	                this._items = {};
+	            }
+	            var prevItems = this._items,
+	                newItems = {},
+	                added = [],
+	                removed = [],
+	                key;
+	
+	            for (var i = 0; i < len; i++) {
+	                var it = data[i];
+	
+	                key = it.id + '_' + it.tileKey;
+	
+	                newItems[key] = it;
+	
+	                if (!prevItems[key]) {
+	                    added.push(it);
+	                }
+	            }
+	
+	            for (key in prevItems) {
+	                if (!newItems[key]) {
+	                    removed.push(prevItems[key]);
+	                }
+	            }
+	
+	            if (added.length) {
+	                out.added = added;
+	            }
+	            if (removed.length) {
+	                out.removed = removed;
+	            }
+	
+	            this._items = newItems;
+	        } else {
+	            out.added = data;
+	        }
+	        this._callback(out);
+	        out = null;
+	        data = null;
+	
+	        return this;
+	    },
+	
+	    removeData: function removeData(keys) {
+	        if (this.type !== 'update' || !this._items) {
+	            return this;
+	        }
+	
+	        var items = this._items,
+	            removed = [];
+	
+	        for (var id in keys) {
+	            if (items[id]) {
+	                removed.push(items[id]);
+	                delete items[id];
+	            }
+	        }
+	
+	        if (removed.length) {
+	            this._callback({ removed: removed });
+	        }
+	
+	        return this;
+	    },
+	
+	    /*setFilter: function (func) {
+	        this._filters.userFilter = func;
+	        this.fire('update');
+	        return this;
+	    },
+	      removeFilter: function () {
+	        delete this._filters.userFilter;
+	        this.fire('update');
+	        return this;
+	    },*/
+	
+	    setBounds: function setBounds(bounds) {
+	        var w;
+	        if (!bounds) {
+	            if (!this.world) {
+	                w = _Utils.gmxAPIutils.worldWidthMerc;
+	                this.bbox = _Utils.gmxAPIutils.bounds([[-w, -w], [w, w]]);
+	                this.bbox1 = null;
+	                this.world = true;
+	                this.fire('update');
+	            }
+	            return this;
+	        }
+	
+	        var min = bounds.min,
+	            max = bounds.max;
+	        if (!min || !max) {
+	            var latLngBounds = L.latLngBounds(bounds),
+	                sw = latLngBounds.getSouthWest(),
+	                ne = latLngBounds.getNorthEast();
+	            min = { x: sw.lng, y: sw.lat };
+	            max = { x: ne.lng, y: ne.lat };
+	        }
+	        var minX = min.x,
+	            maxX = max.x,
+	            minY = min.y,
+	            maxY = max.y,
+	            minX1 = null,
+	            maxX1 = null;
+	
+	        this.world = false;
+	        w = (maxX - minX) / 2;
+	        if (w >= 180) {
+	            minX = -180;maxX = 180;
+	            this.world = true;
+	        } else if (maxX > 180 || minX < -180) {
+	            var center = (maxX + minX) / 2 % 360;
+	            if (center > 180) {
+	                center -= 360;
+	            } else if (center < -180) {
+	                center += 360;
+	            }
+	            minX = center - w;maxX = center + w;
+	            if (minX < -180) {
+	                minX1 = minX + 360;maxX1 = 180;minX = -180;
+	            } else if (maxX > 180) {
+	                minX1 = -180;maxX1 = maxX - 360;maxX = 180;
+	            }
+	        }
+	        var m1 = L.Projection.Mercator.project(L.latLng(minY, minX)),
+	            m2 = L.Projection.Mercator.project(L.latLng(maxY, maxX));
+	
+	        this.bbox = _Utils.gmxAPIutils.bounds([[m1.x, m1.y], [m2.x, m2.y]]);
+	        this.bbox1 = null;
+	        if (minX1) {
+	            m1 = L.Projection.Mercator.project(L.latLng(minY, minX1));
+	            m2 = L.Projection.Mercator.project(L.latLng(maxY, maxX1));
+	            this.bbox1 = _Utils.gmxAPIutils.bounds([[m1.x, m1.y], [m2.x, m2.y]]);
+	        }
+	
+	        this.fire('update');
+	        return this;
+	    },
+	
+	    intersects: function intersects(bounds) {
+	        return this.world || this.bbox.intersects(bounds) || !!(this.bbox1 && this.bbox1.intersects(bounds));
+	    },
+	
+	    intersectsWithTile: function intersectsWithTile(tile) {
+	        if (this.targetZoom) {
+	            var z = this.targetZoom + (this.targetZoom % 2 ? 1 : 0);
+	            if (tile.isGeneralized && tile.z !== z || tile.z > z) {
+	                return false;
+	            }
+	        }
+	        var di = this.dateInterval;
+	        return this.intersects(tile.bounds) && (!tile.beginDate || di && di.endDate >= tile.beginDate && di.beginDate <= tile.endDate);
+	    },
+	
+	    _setDateInterval: function _setDateInterval(beginDate, endDate) {
+	        if (beginDate && endDate) {
+	            // var beginValue = beginDate.valueOf(),
+	            // endValue = endDate.valueOf();
+	            this.dateInterval = {
+	                beginDate: beginDate,
+	                endDate: endDate
+	            };
+	        } else {
+	            this.dateInterval = null;
+	        }
+	    },
+	
+	    setDateInterval: function setDateInterval(beginDate, endDate) {
+	        var isValid = beginDate && endDate;
+	
+	        if (!this.dateInterval !== !isValid || isValid && (this.dateInterval.beginDate.valueOf() !== beginDate.valueOf() || this.dateInterval.endDate.valueOf() !== endDate.valueOf())) {
+	            this._setDateInterval(beginDate, endDate);
+	            this.fire('update', { temporalFilter: true });
+	        }
+	        return this;
+	    }
+	}); //Single observer with vector data
+	exports.Observer = Observer;
+
+/***/ },
+/* 17 */
+/***/ function(module, exports) {
+
+	'use strict';
+	
+	(function () {
+	    //tree for fast tiles selection inside temporal interval
+	    //  options:
+	    //      TemporalTiles: tilePoints array
+	    //      TemporalVers: tiles version array
+	    //      TemporalPeriods: periods
+	    //      ZeroDate: start Date
+	    var TilesTree = function TilesTree(options) {
+	        var _rootNodes = [],
+	            tiles = options.TemporalTiles || [],
+	            vers = options.TemporalVers || [],
+	            periods = options.TemporalPeriods || [],
+	            maxPeriod = periods[periods.length - 1],
+	            smin = Number.MAX_VALUE,
+	            arr = options.ZeroDate.split('.'),
+	            zn = new Date(arr.length > 2 ? arr[2] : 2008, arr.length > 1 ? arr[1] - 1 : 0, arr.length > 0 ? arr[0] : 1),
+	            dateZero = new Date(zn.getTime() - zn.getTimezoneOffset() * 60000),
+	            zeroUT = dateZero.getTime() / 1000;
+	
+	        this.dateZero = dateZero;
+	
+	        var addTile = function addTile(node, tile, key) {
+	            var d = node.d;
+	            if (tile.d === periods[d]) {
+	                node.count++;
+	                node.tiles.push(key);
+	                return;
+	            }
+	
+	            var pd = periods[d - 1],
+	                childrenCount = periods[d] / pd;
+	
+	            if (!('children' in node)) {
+	                node.children = new Array(childrenCount);
+	            }
+	
+	            var sChild = Math.floor(tile.s * tile.d / pd),
+	                ds = sChild - node.s * childrenCount;
+	
+	            if (!node.children[ds]) {
+	                var pdOneDay = pd * gmxAPIutils.oneDay,
+	                    t1 = sChild * pdOneDay + zeroUT;
+	                node.children[ds] = {
+	                    d: d - 1,
+	                    s: sChild,
+	                    t1: t1,
+	                    t2: t1 + pdOneDay,
+	                    count: 0,
+	                    children: [],
+	                    tiles: []
+	                };
+	            }
+	
+	            addTile(node.children[ds], tile, key);
+	        };
+	
+	        var dmax = periods.length - 1,
+	            dmaxOneDay = periods[dmax] * gmxAPIutils.oneDay,
+	            i,
+	            len;
+	
+	        for (i = 0, len = tiles.length; i < len; i++) {
+	            arr = tiles[i];
+	            var s = Number(arr[1]),
+	                d = Number(arr[0]);
+	
+	            if (d === maxPeriod) {
+	                smin = Math.min(smin, s);
+	            }
+	        }
+	        for (i = 0, len = tiles.length; i < len; i++) {
+	            arr = tiles[i];
+	            var t = {
+	                x: Number(arr[2]),
+	                y: Number(arr[3]),
+	                z: Number(arr[4]),
+	                v: Number(vers[i]),
+	                s: Number(arr[1]),
+	                d: Number(arr[0])
+	            };
+	            if (t.d < 0) {
+	                continue;
+	            }
+	
+	            var ds = Math.floor(t.s * t.d / periods[dmax]) - smin,
+	                cs = ds + smin;
+	
+	            _rootNodes[ds] = _rootNodes[ds] || {
+	                d: dmax,
+	                s: cs,
+	                t1: cs * dmaxOneDay + zeroUT,
+	                t2: (cs + 1) * dmaxOneDay + zeroUT,
+	                count: 0,
+	                tiles: []
+	            };
+	            var key = VectorTile.createTileKey(t);
+	
+	            addTile(_rootNodes[ds], t, key);
+	        }
+	        tiles = vers = null;
+	
+	        //options: bounds (in mercator projection)
+	        this.selectTiles = function (t1, t2, options) {
+	
+	            options = options || {};
+	
+	            var t1Val = t1.valueOf() / 1000,
+	                t2Val = t2.valueOf() / 1000;
+	
+	            // We will restrict tile levels by the nearest two levels to target date interval length
+	            // For example, if date interval length is 3 days, we wll search tiles among 1-day and 4-day tiles
+	            var minLevel = 0,
+	                dateIntervalLength = (t2Val - t1Val) / 3600 / 24;
+	
+	            for (var i = 0; i < periods.length; i++) {
+	                if (periods[i] > dateIntervalLength) {
+	                    minLevel = Math.max(0, i - 1);
+	                    break;
+	                }
+	            }
+	
+	            if (periods[periods.length - 1] <= dateIntervalLength) {
+	                minLevel = periods.length - 1;
+	            }
+	
+	            var maxLevel = Math.min(periods.length - 1, minLevel + Number(dateIntervalLength > periods[minLevel]));
+	
+	            var getCountOfIntersected = function getCountOfIntersected(tileBounds, bounds) {
+	                var count = 0;
+	                for (var t = 0; t < tileBounds.length; t++) {
+	                    if (tileBounds[t].intersects(bounds)) {
+	                        count++;
+	                    }
+	                }
+	
+	                return count;
+	            };
+	
+	            // --------------------
+	            var selectTilesForNode = function selectTilesForNode(node, t1, t2) {
+	                if (t1 >= node.t2 || t2 <= node.t1) {
+	                    return { count: 0, tiles: [], nodes: [] };
+	                }
+	
+	                if (options.bounds && !node.tileBounds) {
+	                    node.tileBounds = node.tiles.map(function (it) {
+	                        return VectorTile.boundsFromTileKey(it);
+	                    });
+	                }
+	
+	                if (node.d === minLevel) {
+	                    var count = options.bounds ? getCountOfIntersected(node.tileBounds, options.bounds) : node.count;
+	                    return {
+	                        tiles: node.tiles,
+	                        count: count,
+	                        nodes: [node]
+	                    };
+	                }
+	
+	                var childrenCount = 0,
+	
+	                //number of tiles if we use shorter intervals
+	                childrenRes = [],
+	                    len = node.children ? node.children.length : 0,
+	                    ds;
+	
+	                for (ds = 0; ds < len; ds++) {
+	                    if (node.children[ds]) {
+	                        childrenRes[ds] = selectTilesForNode(node.children[ds], Math.max(t1, node.t1), Math.min(t2, node.t2));
+	                    } else {
+	                        childrenRes[ds] = { count: 0, tiles: [], nodes: [] };
+	                    }
+	                    childrenCount += childrenRes[ds].count;
+	                }
+	
+	                var intersectCount = options.bounds ? getCountOfIntersected(node.tileBounds, options.bounds) : node.count;
+	
+	                if (node.d > maxLevel || childrenCount < intersectCount) {
+	                    var resTilesArr = [],
+	                        resNodesArr = [];
+	                    for (ds = 0; ds < childrenRes.length; ds++) {
+	                        resNodesArr.push(childrenRes[ds].nodes);
+	                        resTilesArr.push(childrenRes[ds].tiles);
+	                    }
+	
+	                    return {
+	                        tiles: [].concat.apply([], resTilesArr),
+	                        count: childrenCount,
+	                        nodes: [].concat.apply([], resNodesArr)
+	                    };
+	                } else {
+	                    return {
+	                        tiles: node.tiles,
+	                        count: intersectCount,
+	                        nodes: [node]
+	                    };
+	                }
+	            };
+	
+	            var resTiles = [];
+	            for (var ds = 0; ds < _rootNodes.length; ds++) {
+	                if (_rootNodes[ds]) {
+	                    var nodeSelection = selectTilesForNode(_rootNodes[ds], t1Val, t2Val);
+	                    if (nodeSelection.tiles.length) {
+	                        resTiles = resTiles.concat(nodeSelection.tiles);
+	                    }
+	                }
+	            }
+	
+	            var resTilesHash = {};
+	            for (var t = 0; t < resTiles.length; t++) {
+	                resTilesHash[resTiles[t]] = true;
+	            }
+	
+	            return { tiles: resTilesHash };
+	        };
+	
+	        this.getNode = function (d, s) {
+	            if (d < 0 || s < 0) {
+	                return null;
+	            }
+	
+	            var findNode = function findNode(node, d, s) {
+	                if (!node) {
+	                    return null;
+	                }
+	
+	                if (periods[node.d] === d) {
+	                    return node.s === s ? node : null;
+	                }
+	
+	                var childrenCount = periods[node.d] / periods[node.d - 1];
+	                var sChild = Math.floor(s * d / periods[node.d - 1]);
+	                var ds = sChild - node.s * childrenCount;
+	
+	                return node.children[ds] ? findNode(node.children[ds], d, s) : null;
+	            };
+	
+	            for (var ds = 0; ds < _rootNodes.length; ds++) {
+	                var node = findNode(_rootNodes[ds], d, s);
+	                if (node) {
+	                    return node;
+	                }
+	            }
+	
+	            return null;
+	        };
+	    };
+	    L.gmx.tilesTree = function (options) {
+	        return new TilesTree(options);
+	    };
+	})();
 
 /***/ },
 /* 18 */
@@ -13319,6 +13339,142 @@
 	
 	    return layer;
 	};
+
+/***/ },
+/* 37 */
+/***/ function(module, exports) {
+
+	'use strict';
+	
+	/** GeoMixer virtual layer for standard tile raster layers (L.TileLayer)
+	*/
+	(function () {
+	
+	    'use strict';
+	
+	    //this function is copied from L.Utils and modified to allow missing data attributes
+	
+	    var template = function template(str, data) {
+	        return str.replace(/\{ *([\w_]+) *\}/g, function (str, key) {
+	            var value = data[key];
+	            if (value === undefined) {
+	                value = '';
+	            } else if (typeof value === 'function') {
+	                value = value(data);
+	            }
+	            return value;
+	        });
+	    };
+	
+	    var GmxVirtualTileLayer = function GmxVirtualTileLayer() {};
+	
+	    GmxVirtualTileLayer.prototype.initFromDescription = function (layerDescription) {
+	        var props = layerDescription.properties,
+	            meta = props.MetaProperties,
+	            urlTemplate = meta['url-template'] && meta['url-template'].Value,
+	            isMercator = !!meta['merc-projection'],
+	            options = {};
+	
+	        if (!urlTemplate) {
+	            return new L.gmx.DummyLayer(props);
+	        }
+	
+	        if (props.Copyright) {
+	            options.attribution = props.Copyright;
+	        }
+	
+	        if (meta.minZoom) {
+	            options.minZoom = meta.minZoom.Value;
+	        }
+	
+	        if (meta.maxZoom) {
+	            options.maxZoom = meta.maxZoom.Value;
+	        }
+	
+	        var layer = (isMercator ? L.tileLayer.Mercator : L.tileLayer)(urlTemplate, options);
+	
+	        layer.getGmxProperties = function () {
+	            return props;
+	        };
+	
+	        return layer;
+	    };
+	
+	    L.gmx.addLayerClass('TMS', GmxVirtualTileLayer);
+	
+	    //depricated - use "TMS" instead
+	    L.gmx.addLayerClass('TiledRaster', GmxVirtualTileLayer);
+	
+	    var GmxVirtualWMSLayer = function GmxVirtualWMSLayer() {};
+	
+	    GmxVirtualWMSLayer.prototype.initFromDescription = function (layerDescription) {
+	        var WMS_OPTIONS = ['layers', 'styles', 'format', 'transparent', 'version', 'minZoom', 'maxZoom', 'tileSize', 'f', 'bboxSR', 'imageSR', 'size'];
+	        var WMS_OPTIONS_PROCESSORS = { tileSize: parseInt };
+	        var props = layerDescription.properties,
+	            meta = props.MetaProperties,
+	            baseURL = meta['base-url'] && meta['base-url'].Value,
+	            options = {};
+	
+	        if (!baseURL) {
+	            return new L.gmx.DummyLayer(props);
+	        }
+	
+	        if (props.Copyright) {
+	            options.attribution = props.Copyright;
+	        }
+	
+	        for (var p in meta) {
+	            if (WMS_OPTIONS.indexOf(p) !== -1) {
+	                options[p] = WMS_OPTIONS_PROCESSORS[p] ? WMS_OPTIONS_PROCESSORS[p](meta[p].Value) : meta[p].Value;
+	            }
+	        }
+	
+	        var layer = L.tileLayer.wms(baseURL, options);
+	
+	        layer.getGmxProperties = function () {
+	            return props;
+	        };
+	
+	        var balloonTemplate = meta['balloonTemplate'] && meta['balloonTemplate'].Value;
+	        if (meta['clickable'] && balloonTemplate) {
+	            layer.options.clickable = true;
+	
+	            layer.onRemove = function (map) {
+	                lastOpenedPopup && map.removeLayer(lastOpenedPopup);
+	                L.TileLayer.WMS.prototype.onRemove.apply(this, arguments);
+	            };
+	
+	            var lastOpenedPopup;
+	            layer.gmxEventCheck = function (event) {
+	                if (event.type === 'click') {
+	                    var p = this._map.project(event.latlng),
+	                        tileSize = layer.options.tileSize,
+	                        I = p.x % tileSize,
+	                        J = p.y % tileSize,
+	                        tilePoint = p.divideBy(tileSize).floor(),
+	                        url = this.getTileUrl(tilePoint);
+	
+	                    url = url.replace('=GetMap', '=GetFeatureInfo');
+	                    url += '&X=' + I + '&Y=' + J + '&INFO_FORMAT=application/geojson&QUERY_LAYERS=' + options.layers;
+	
+	                    fetch(url).then(function (geoJSON) {
+	                        // $.getJSON(url).then(function(geoJSON) {
+	                        if (geoJSON.features[0]) {
+	                            var html = template(balloonTemplate, geoJSON.features[0].properties);
+	                            lastOpenedPopup = L.popup().setLatLng(event.latlng).setContent(html).openOn(this._map);
+	                        }
+	                    }.bind(this));
+	                }
+	
+	                return 1;
+	            };
+	        }
+	
+	        return layer;
+	    };
+	
+	    L.gmx.addLayerClass('WMS', GmxVirtualWMSLayer);
+	})();
 
 /***/ }
 /******/ ]);

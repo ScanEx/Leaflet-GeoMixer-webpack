@@ -41,3 +41,4 @@ import './Layer/external/HeatMap.js';
 import './Layer/external/MarkerCluster.js';
 
 import './LayerFactory.js';
+import './Layer/external/GmxVirtualTileLayer.js';

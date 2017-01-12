@@ -1,5 +1,6 @@
 //Helper class, that represents layers of single Geomixer's map
 //Creates layers from given map description
+import {DataManager} from './DataManager/DataManager.js';
 var gmxMap = L.Class.extend({
     includes: L.Mixin.Events,
 

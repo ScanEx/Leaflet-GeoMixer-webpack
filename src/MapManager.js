@@ -93,6 +93,22 @@ var gmxMapManager = {
 
         treeInfo && iterate(treeInfo.children);
     },
+    iterateNode: function(treeInfo, callback) {
+        var iterate = function(node) {
+			var arr = node.children;
+            for (var i = 0, len = arr.length; i < len; i++) {
+                var layer = arr[i];
+
+				callback(layer);
+                if (layer.type === 'group') {
+                    iterate(layer.content);
+                // } else if (layer.type === 'layer') {
+                }
+            }
+        };
+
+        treeInfo && iterate(treeInfo);
+    },
     _maps: {} //Promise for each map. Structure: maps[serverHost][mapID]: {promise:, layers:}
 };
 export {gmxMapManager};
