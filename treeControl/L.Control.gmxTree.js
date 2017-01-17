@@ -1,7 +1,7 @@
-L.Control.GmxTree = L.Control.Layers.extend({
+L.Control.GmxTree = L.Control.extend({
     includes: L.Mixin.Events,
     options: {
-        collapsed: false,
+        position: 'topright',
         autoZIndex: false,
 		contextMenu: false,
         id: 'layersTree'
@@ -16,13 +16,25 @@ L.Control.GmxTree = L.Control.Layers.extend({
         this._handlingClick = false;
 
         if (options.mapID) {
-			this._getMap(options.mapID);
+			// this._getMap(options.mapID);
 		}
     },
 
     onAdd: function (map) {
-        var cont = L.Control.Layers.prototype.onAdd.call(this, map);
-        this._container = cont;
+		var _this = this,
+			pos = this.getPosition(),
+			corner = map._controlCorners[pos];
+
+		if (!corner) {
+			corner = document.getElementById(pos);
+			if (!corner) {
+				var arr = document.getElementsByClassName(pos);
+				corner = arr.length ? arr[0] : document.getElementById(pos) || map._controlCorners[L.Control.prototype.GmxTree.options.position];
+			}
+			if (!map._controlCorners[pos]) { map._controlCorners[pos] = corner; }
+		}
+
+        var cont = this._container = L.DomUtil.create('div', this.options.className || 'mapTree-container');
         cont.id = this.options.id;
 
 		var tree = this._tree = new InspireTree({
@@ -33,51 +45,93 @@ L.Control.GmxTree = L.Control.Layers.extend({
 				multiple: false,
 				mode: 'checkbox'
 			},
-			data: []
+			dragTargets: [
+				cont
+			],
+			// data: []
+			data: function(node, resolve, reject) {
+console.log('data', node, resolve, reject);
+				_this._getMap(_this.options.mapID);
+				// if (!node) {	// основная карта
+					// _this._getMap(_this.options.mapID, node);
+				// }
+				// return $.getJSON('sample-data/' + (node ? node.id : 'root') + '.json');
+				return [];
+			}
 		});
-		var _this = this;
         tree
 			.on('model.loaded', function() {
 				// console.log('dddddddd', arguments);
             })
 			.on('node.click', function() {
-				// console.log('node.click', arguments);
-            }) 
+				console.log('node.click', arguments);
+            })
+			.on('node.expanded', function(treeNode) {
+				if (treeNode && treeNode.gmxOptions && treeNode.gmxOptions.dataSource) {
+					// treeNode.getChildren().forEach(function(node) {node.remove();});
+					_this._getMap(treeNode.gmxOptions.dataSource, treeNode);
+				}
+				_this.fire('expanded', {treeNode: treeNode});
+				console.log('node.expanded', treeNode);
+            })
 			.on('node.selected', function(treeNode) {
 				_this.fire('selected', {treeNode: treeNode});
 				// console.log('node.selected', treeNode);
-            })
+            }) 
 			.on('node.deselected', function(treeNode) {
 				_this.fire('deselected', {treeNode: treeNode});
 				// console.log('node.deselected', treeNode);
             })
+			.on('node.dropin', function(treeNode) {
+				_this.fire('dropin', {treeNode: treeNode});
+				console.log('node.dropin', arguments);
+            })
+			.on('node.dropout', function(treeNode, target, targetIsTree) {
+				_this.fire('dropout', {treeNode: treeNode, target: target, targetIsTree: targetIsTree});
+                // treeNode.softRemove();
+                // var selected = treeNode.selected();
+
+                // if (targetIsTree) {
+                    // alert('dropped ' + treeNode.text + ' into another tree');
+                // } else {
+                    // alert('dropped ' + treeNode.text + ' into a div');
+                // }
+				console.log('node.dropout', tree.selected(), arguments);
+            })
 			.on('node.contextmenu', function(ev, node) {
-				_this._hideContextMenu();
-				if (_this.options.contextMenu) {
-					_this.options.contextmenuItems = _this.options.contextMenu({
-						originalEvent: ev,
-						node: node
-					}) || [];
-					_this._showContextMenu({originalEvent: ev});
-				}
+				_this.fire('contextmenu', {originalEvent: ev, treeNode: node}, _this);
+				_this._showContextMenu({originalEvent: ev});
             });
 
-        if (this.options.contextMenu) {
-			this.bindContextMenu({
-				contextmenu: true,
-				contextmenuInheritItems: false,
-				contextmenuItems: []
-			});
-            map.on('mousedown', this._hideContextMenu, this);
-        }
+		this.bindContextMenu({
+			contextmenu: true,
+			contextmenuInheritItems: false,
+			contextmenuItems: []
+		});
+		map.on('mousedown', function(ev) {
+			this.setContextMenuItems();
+			this._hideContextMenu();
+		}, this);
         if (map.gmxControlsManager) {
             map.gmxControlsManager.add(this);
         }
         return cont;
     },
 
+    setContextMenuItems: function (arr) {
+		this.options.contextmenuItems = arr || [];
+    },
+
+    nodeExpanded: function (treeNode) {
+console.log('nodeExpanded', treeNode);
+		var gmxOptions = treeNode.gmxOptions;
+		if (gmxOptions.dataSource) {
+			this._getMap(treeNode);
+		}
+    },
+
     nodeDeselect: function (ev) {
-console.log('nodeDeselect', ev);
+// console.log('nodeDeselect', ev);
 		var node = ev.treeNode,
 			layer = node.gmxOptions.layer;
 		if (layer && layer._map) {
@@ -95,7 +149,7 @@ console.log('nodeDeselect', ev);
     _setNodeLayer: function (node) {
 		var gmxOptions = node.gmxOptions,
 			layer = gmxOptions.layer;
-console.log('nodeSelect', node.radio);
+// console.log('nodeSelect', node.radio);
 			
 		if (layer) {
 			if (layer.setZIndexOffset) {
@@ -126,58 +180,66 @@ console.log('nodeSelect', node.radio);
 			_this = this;
 
 		this._tree.recurseDown(function(node) {
-			node.gmxOptions.index = ++count;
-			var props = node.content.properties;
-			if (node.type === 'group') {
-				if (props.expanded) {
-					node.expand();
-				}
-				if (!props.ShowCheckbox) {
-					node.hide();
-				}
-			} else if (node.type === 'layer') {
-				var pNode = node.getParent();
-				if (pNode && pNode.content.properties.list) {
-					node.radio = true;
-					var arr = node.itree.ref.node.getElementsByTagName('input');
-					if (arr) {
-						arr[0].setAttribute('name', pNode.id);
-						arr[0].setAttribute('type', 'radio');
+			if (node.gmxOptions) {
+				node.gmxOptions.index = ++count;
+				var props = node.content.properties;
+				if (node.type === 'group') {
+					if (props.expanded) {
+						node.expand();
 					}
-				}
-				if (chkVisible && props.visible) {
-					node.select();
+					if (!props.ShowCheckbox) {
+						node.hide();
+					}
+				} else if (node.type === 'layer') {
+					var pNode = node.getParent();
+					if (pNode && pNode.content.properties.list) {
+						node.radio = true;
+						var arr = node.itree.ref.node.getElementsByTagName('input');
+						if (arr) {
+							arr[0].setAttribute('name', pNode.id);
+							arr[0].setAttribute('type', 'radio');
+						}
+					}
+					if (chkVisible && props.visible) {
+						node.select();
+					}
 				}
 			}
 		});
     },
 
-    _getMap: function (id) {
-        if (id) {
-			var _this = this,
-				hostName = L.gmxUtil.normalizeHostname(this.options.hostName || 'maps.kosmosnimki.ru');
+    _getMap: function (mapID, treeNode) {
+		var _this = this,
+			hostName = L.gmxUtil.normalizeHostname(this.options.hostName || 'maps.kosmosnimki.ru');
 
-			L.gmx.gmxMapManager.getMap(hostName, this.options.apiKey, id, this.options.skipTiles).then(function(res) {
-// console.log(res);
-				L.gmx.gmxMapManager.iterateNode(res, function(node) {
-					// if (node.type === 'group') {
-						// iterate(layer.content);
-					// } else if (layer.type === 'layer') {
-					// }
-					var props = node.content.properties;
-					node.gmxOptions = {
-						dataSource: props.dataSource || '',
-						mapID: id
-					};
-					node.id = props.name || props.GroupID;
-					node.text = props.title;
-					node.children = node.content.children;
-				});
-				_this._tree.addNodes(res.children);
-				_this._reIndex(true);
-				//var layerInfo = L.gmx.gmxMapManager.findLayerInfo(hostName, mapID, layerID);
+		L.gmx.gmxMapManager.getMap(hostName, this.options.apiKey, mapID, this.options.skipTiles).then(function(res) {
+			L.gmx.gmxMapManager.iterateNode(res, function(node) {
+				var props = node.content.properties;
+				node.gmxOptions = {
+					dataSource: props.dataSource || '',
+					mapID: mapID
+				};
+				node.id = props.name || props.GroupID;
+				node.text = props.title;
+				node.children = node.content.children;
+				if (node.type === 'group' && node.gmxOptions.dataSource) {
+					if (props.expanded || props.visible) {
+console.log('aaaaaaaa', node.gmxOptions.dataSource);
+					} else {
+						node.children = true;
+						// [
+							// {text: 'Extrnal map', mapID: node.gmxOptions.dataSource}
+						// ];
+					}
+					// iterate(layer.content);
+				// } else if (layer.type === 'layer') {
+				}
 			});
-        }
+			if (treeNode) { treeNode.addChildren(res.children); }
+			else { _this._tree.addNodes(res.children); }
+			_this._reIndex(true);
+			//var layerInfo = L.gmx.gmxMapManager.findLayerInfo(hostName, mapID, layerID);
+		});
         return this;
     }
 });

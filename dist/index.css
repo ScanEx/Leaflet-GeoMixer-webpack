@@ -37,3 +37,6 @@ html, body, #map {
 {
 	border-bottom: 1px solid #999999
 }
+.mapTree-container {
+	border: 1px solid transparent;
+}
